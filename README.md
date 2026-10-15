@@ -3,8 +3,7 @@
 Plugin chạy một **software factory** ngay trong agent harness (model **v_deepseek**):
 bạn chat tự do để lên ý tưởng, rồi kích hoạt factory để hệ thống tự **viết spec → build
 → review → approve** (hoặc đưa về người quyết — human-in-the-loop). Build theo đúng vòng
-loop của [zazencodes-season-3/src/software-factory-claude-code](https://github.com/zazencodes/zazencodes-season-3/tree/main/src/software-factory-claude-code)
-được đóng gói lại cho harness này + thêm **cầu claude.ai** cho các bước suy luận nặng.
+loop ý tưởng được đóng gói lại cho harness này + thêm **cầu claude.ai** cho các bước suy luận nặng.
 
 ```
 feature (từ plan/free-chat) → spec-writer → builder → [security, ux, ui, code] → WAIT FOR ALL
