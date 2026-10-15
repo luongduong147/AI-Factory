@@ -1,0 +1,15 @@
+{
+  "name": "ai-factory-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CDP bridge to claude.ai ('ask like a real person') + optional chrome-devtools-mcp (tuyen B). Node >= 22.",
+  "scripts": {
+    "ask": "node claude_ask.mjs",
+    "selftest": "node claude_ask.mjs --selftest",
+    "start-bridge": "powershell -ExecutionPolicy Bypass -File start-bridge.ps1",
+    "mcp": "npx -y chrome-devtools-mcp@latest --no-usage-statistics"
+  },
+  "dependencies": {
+    "chrome-devtools-mcp": "^1.10.1"
+  }
+}

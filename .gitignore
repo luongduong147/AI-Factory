@@ -1,0 +1,14 @@
+# runtime
+factory/jobs/*
+!factory/jobs/.gitkeep
+
+# bridge profile (login/claude.ai, private)
+bridge/.chrome-profile/
+
+# node / npm
+node_modules/
+*.log
+
+# os
+.DS_Store
+Thumbs.db
