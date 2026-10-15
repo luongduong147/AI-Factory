@@ -1,12 +1,9 @@
 ---
 name: factory
-description: AI Software Factory — vòng loop spec → build → review → approve cho mọi feature. Dùng khi user gõ /factory <feature>, /factory next, /factory approve <job-id>, /factory rework <job-id> <note>, /factory bridge <job-id>, hoặc nói rõ "chạy AI software factory / chạy factory cho ý tưởng …".
-version: 1
-tools: [subagent, send_message, ask_user_question, todo_write, create_goal, read, write, edit, pwsh, web_fetch, web_search]
-triggers: ["/factory", "ai software factory", "chạy factory", "chạy software factory", "software factory"]
-model_invocable: true
-user_invocable: true
-rank: 250
+description: "AI Software Factory — vòng loop spec → build → review → approve cho mọi feature. Dùng khi người dùng gõ /factory <feature>, /factory next, /factory approve <job-id>, /factory rework <job-id> <note>, /factory bridge <job-id>, hoặc nói rõ 'chạy AI software factory / chạy factory cho ý tưởng …'."
+user-invocable: true
+disable-model-invocation: false
+whenToUse: "Người dùng đã tổng hợp xong ý tưởng/feature (plan phase) và muốn chạy software factory để viết spec, build, review, approve — hoặc cần ý kiến thứ hai từ claude.ai cho một bước suy luận."
 ---
 
 # AI Software Factory — runbook của orchestrator

@@ -18,7 +18,7 @@ feature (từ plan/free-chat) → spec-writer → builder → [security, ux, ui,
 ```
 <bundle>/                       ← repo AI-Factory (thư mục này)
 ├── SKILL.md                   ← runbook ORCHESTRATOR (skill của harness, frontmatter chuẩn)
-├── skills/factory.md          ← bản đăng ký cho HARNESS_SKILL_DIR (cùng nội dung SKILL.md)
+├── skills/factory.md          ← skill DSH-chuẩn (frontmatter user-invocable) để cài toàn cục dsh-tui
 ├── agents/                    ← 7 thẻ vai trò (prompt spawn subagent, chạy bằng v_deepseek)
 │   ├── spec-writer.md            spec.md  (Context/Requirements/Acceptance/Out of scope/Assumptions)
 │   ├── builder.md                code trên factory/<id> + build.md (STATUS: READY|BLOCKED)
@@ -42,30 +42,35 @@ feature (từ plan/free-chat) → spec-writer → builder → [security, ux, ui,
 
 ## Cài đặt
 
-### 1. Kích hoạt skill trong harness
-Skill của harness đọc từ `HARNESS_SKILL_DIR` (1 skill = 1 file `.md` với frontmatter
-`name/description/version` + tùy chọn `tools/triggers/model_invocable/user_invocable/rank`).
-Repo này đã đóng sẵn `skills/factory.md` (cùng nội dung `SKILL.md`) — **chỉ cần trỏ
-`HARNESS_SKILL_DIR` vào `<bundle>/skills`** (thư mục này chỉ chứa đúng 1 file .md):
+### 1. Cài làm skill/plugin mặc định của dsh-tui (mọi folder đều dùng được)
+dsh-tui bật skills qua `agent-spine.config.skills.enabled: true` và provider
+`dsh-skill-filesystem` quét **toàn cục của user** theo rank: `<dshHome>/skills`
+(DSH_HOME hoặc `~/.dsh`), `<agentsHome>/skills`, rồi project roots. Chỉ cần đặt file skill
+vào `<dshHome>/skills` là nó thành "plugin mặc định" — bất kỳ project/folder nào mở bằng
+dsh-tui đều gõ được `/factory`:
+
+```powershell
+New-Item -ItemType Directory -Force "$HOME\.dsh-tui-home\skills" | Out-Null   # DSH_HOME của dsh-tui
+Copy-Item skills\factory.md "$HOME\.dsh-tui-home\skills\factory.md" -Force
+```
+
+- Đã cài sẵn trên máy này: `C:\Users\duonglnt\.dsh-tui-home\skills\factory.md`. Bản cài dùng
+  **frontmatter DSH chuẩn** (`user-invocable: true`, `disable-model-invocation: false`) và đã nội
+  suy `<bundle>` → `D:\Learning_space\AI-Factory` để chạy được từ mọi cwd.
+- Trong dsh-tui: `/factory <feature>` chạy job qua loop; `/skills` xem catalog. Provider `watch`
+  bật sẵn → sửa file là nạp ngay, không cần restart.
+- Cập nhật sau mỗi lần đổi repo: copy lại `skills/factory.md` (lệnh trên).
+
+### 2. (Tùy chọn) Kích hoạt cho harness dùng `HARNESS_SKILL_DIR` khác
+Nếu bạn có harness/skill-service riêng (vd CRM harness) muốn nạp skill này, trỏ
+`HARNESS_SKILL_DIR` vào `<bundle>/skills` (thư mục chỉ chứa 1 file `.md` `factory.md`):
 
 ```bash
-# env (docker-compose harness hoặc khi chạy dev)
 HARNESS_SKILL_DIR=<bundle>/skills
 ```
 
-Vd bản thân máy này (`D:\Learning_space\AI-Factory`): bind-mount đúng folder skills
-vào container:
-```yaml
-# harness service — thay thế volume named cho /data/skills bằng bind mount
-volumes:
-  - D:/Learning_space/AI-Factory/skills:/data/skills
-```
-
-Sau đó skill sẵn sàng (tên skill là `factory`): gõ `/factory …` hoặc nói *"chạy AI
-software factory…"* (trigger NL), hoặc orchestrator tự gọi tool `skill {factory}`.
-
-> Lưu ý: KHÔNG trỏ `HARNESS_SKILL_DIR` thẳng vào root `<bundle>` (AI-Factory) — loader
-> đăng ký **mọi** `.md` (agent cards/README…) thành skill. Chỉ trỏ vào `<bundle>/skills`.
+> Lưu ý: KHÔNG trỏ thẳng vào root `<bundle>` (AI-Factory) — loader đăng ký **mọi** `.md`
+> (agent cards/README…) thành skill. Chỉ trỏ vào `<bundle>/skills`.
 
 ### 2. Claude.ai bridge — Chrome CDP (chạy thật, "hỏi như người thật")
 Bridge dùng **CDP trực tiếp vào Chrome** — KHÔNG cần MCP client — nên harness (dsh) gọi được ngay qua
