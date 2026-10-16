@@ -9,7 +9,8 @@ Chrome với `--remote-debugging-port=9222`.
 
 ## File
 
-- `claude_ask.mjs` — lệnh ask trọn gói (khuôn chính của AI Software Factory bridge).
+- `claude_ask.mjs` — lệnh ask trọn gói (khuôn chính của AI Software Factory bridge); **tái dùng phiên
+  claude.ai đang mở** (xem "Dùng nhanh" bên dưới).
 - `bridge.mjs` — CDP cấp thấp: `tabs`, `eval`, `navigate`, `send <file>`, `read`, `readfile`, `screenshot`.
 - `claude_wait.mjs` / `claude_wait2.mjs` — chờ câu trả lời ổn định rồi lưu (đã tách từ bản scratch).
 - `start-bridge.ps1` — mở Chrome với `--remote-debugging-port=9222` + profile cố định
@@ -29,8 +30,11 @@ node claude_ask.mjs --selftest
 node claude_ask.mjs <brief.txt> <out.txt> [maxSeconds] [--close]
 ```
 
-`claude_ask.mjs` mở **tab claude.ai mới** (`/new`), không đụng tab bạn đang dùng. Một lần
-gọi ghi ra stdout dòng `ASK_OK <path> <chars> <sec>`.
+`claude_ask.mjs` **TIẾP TỤC phiên claude.ai đã có**: nó tìm TAB claude.ai đang mở, chọn phiên tên
+`AI-Factory session` trong sidebar (đổi bằng env `CLAUDE_SESSION_NAME`), rồi gửi brief như một tin nhắn
+tiếp theo — **KHÔNG tạo `/new`**. Chỉ khi chưa có tab claude nào mới mở `/new` dự phòng (và `--close`
+chỉ đóng tab do chính script tự tạo, không đóng tab bạn đang dùng). Mỗi lần gọi ghi ra stdout dòng
+`ASK_OK <path> <chars> <sec>`.
 
 **Mã thoát:** `0` OK · `1` lỗi bước trong quy trình · `2` Chrome CDP chưa chạy (→ chạy
 `start-bridge.ps1`) · `3` claude.ai chưa vào được (chưa đăng nhập trong profile).

@@ -19,9 +19,11 @@ KHÔNG cần MCP client — nên chạy được ngay trong harness (pwsh gọi 
 
 - `start-bridge.ps1` — mở Chrome với `--remote-debugging-port=9222` + **profile cố định
   `.chrome-profile/` ngay cạnh script** (đã đăng nhập claude.ai 1 lần → lần sau vào thẳng).
-- `claude_ask.mjs` — **lệnh ask trọn gói**: mở tab claude.ai mới → chờ composer → gõ brief như người
-  → bấm Gửi (nút Send / Enter) → chờ câu trả lời stream ổn định (2 lần đọc = nhau) → **lưu nguyên văn
-  ra file** + in `ASK_OK <path> <chars> <sec>`. Fail-open rõ lý do.
+- `claude_ask.mjs` — **lệnh ask trọn gói, TIẾP TỤC phiên đã có**: dùng TAB claude.ai đang mở + chọn phiên
+  tên `AI-Factory session` trong sidebar (env `CLAUDE_SESSION_NAME` để đổi tên) → chờ composer → gõ brief
+  như tin nhắn tiếp theo → bấm Gửi (nút Send / Enter) → chờ câu trả lời MỚI ổn định (2 lần đọc = nhau) →
+  **lưu nguyên văn ra file** + in `ASK_OK <path> <chars> <sec>`. KHÔNG tạo `/new`; chỉ mở `/new` dự phòng
+  khi chưa có tab claude nào (`--close` chỉ đóng tab do script tự tạo). Fail-open rõ lý do.
 - `bridge.mjs` — bộ điều khiển CDP cấp thấp (tabs/eval/navigate/send/read/readfile/screenshot) nếu
   cần thao tác tay.
 - `claude_wait.mjs` / `claude_wait2.mjs` — chờ câu trả lời ổn định (tách rời từ bản scratch).
@@ -72,6 +74,9 @@ node <bundle>\bridge\claude_ask.mjs <root>\factory\jobs\<id>\bridge-brief.md <ro
 Đọc stdout: dòng `ASK_OK <path> <chars> <sec>` = có kết quả; `ASK_FAILED …` + exit code → xử lý theo
 bảng mã thoát ở trên. `feedback-raw.md` là **nguyên văn** trang claude.ai (có thể kèm nhãn UI thừa như
 "Claude responded: …" — bỏ khi chắt lọc).
+
+> Mỗi lần ask là **tiếp tục 1 phiên claude.ai cố định tên `AI-Factory session`** (env `CLAUDE_SESSION_NAME`
+> để đổi tên) — claude giữ ngữ cảnh các lượt bridge trước trong cùng phiên, không bị tạo chat mới mỗi lượt.
 
 ### 4. Chắt lọc
 Theo `templates/feedback-ingest.md` → ghi `<job>/feedback.md`:

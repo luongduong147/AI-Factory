@@ -1,26 +1,37 @@
 #!/usr/bin/env node
 /**
- * claude_ask.mjs — HỎI claude.ai NHƯ NGƯỜI THẬT (mở web, gõ câu hỏi, bấm Gửi, chờ trả lời, lưu).
+ * claude_ask.mjs — HỎI claude.ai NHƯ NGƯỜI THẬT, TIẾP TỤC PHIÊN ĐÃ CÓ (không tạo phiên mới).
  *
- * Chạy trên Chrome đã mở với --remote-debugging-port=9222 (xem start-bridge.cmd).
+ * Chạy trên Chrome đã mở với --remote-debugging-port=9222 (xem start-bridge.ps1).
  * Dùng CDP trực tiếp (fetch + WebSocket global, Node >= 22) — KHÔNG cần MCP client.
  *
  * Cách dùng:
- *   node claude_ask.mjs --selftest                         kiểm tra kết nối CDP + tab + composer (KHÔNG gửi)
- *   node claude_ask.mjs <brief.txt> <out.txt> [maxSeconds]  mở tab claude.ai mới, gõ brief, gửi, chờ, lưu kết quả
- *   node claude_ask.mjs <brief.txt> <out.txt> 540 --close   đóng tab sau khi lưu (mặc định giữ tab để xem)
+ *   node claude_ask.mjs --selftest
+ *       kiểm tra kết nối CDP + tab claude + composer (KHÔNG gửi gì)
+ *   node claude_ask.mjs <brief.txt> <out.txt> [maxSeconds]
+ *       TIẾP TỤC phiên claude đang có: tìm TAB claude.ai có sẵn, chọn phiên tên
+ *       "AI-Factory session" (nếu thấy trong sidebar), gõ brief, bấm Gửi, chờ câu
+ *       trả lời MỚI xuất hiện rồi lưu. KHÔNG mở /new, CHỈ khi chưa có tab claude nào
+ *       thì mới mở /new dự phòng.
+ *   node claude_ask.mjs <brief.txt> <out.txt> 540 --close
+ *       đóng tab sau khi lưu — CHỈ đóng tab do script tự tạo dự phòng, KHÔNG đóng tab
+ *       claude bạn đang dùng.
+ *
+ * Phiên mặc định tên: "AI-Factory session" (đổi bằng env CLAUDE_SESSION_NAME).
  *
  * Mã thoát: 0 = OK (có file out). 1 = lỗi bước trong quy trình (fail-open có lý do rõ).
  * 2 = Chrome CDP không kết nối. 3 = claude.ai chưa đăng nhập / trang không vào được.
  */
 const CDP = "http://127.0.0.1:9222";
+const HOST_RE = /claude\.ai/;
+const SESSION_NAME = process.env.CLAUDE_SESSION_NAME ?? "AI-Factory session";
 
 // ---------- helper ----------
 async function cdpList() {
   let res;
   try { res = await fetch(`${CDP}/json/list`); }
   catch (e) {
-    throw Object.assign(new Error("Chrome CDP 9222 chưa kết nối (" + (e.message || e) + ") — chạy start-bridge.cmd để mở Chrome"), { code: 2 });
+    throw Object.assign(new Error("Chrome CDP 9222 chưa kết nối (" + (e.message || e) + ") — chạy start-bridge.ps1 để mở Chrome"), { code: 2 });
   }
   if (!res.ok) throw Object.assign(new Error(`CDP /json/list HTTP ${res.status}`), { code: 2 });
   return res.json();
@@ -79,25 +90,43 @@ const LAST_MSG_EXPR = `(() => {
   return { text: last.innerText, len: last.innerText.length };
 })()`;
 
+/** Tìm TAB claude.ai ĐANG MỞ (không tạo mới). Trả null nếu chưa có. */
+async function findClaudeTab() {
+  const pages = (await cdpList()).filter((t) => t.type === "page");
+  return pages.find((p) => HOST_RE.test(p.url)) ?? null;
+}
+
+/** Chọn (click) phiên đang có theo TÊN trong sidebar claude.ai — không mở /new. */
+const SELECT_SESSION_EXPR = (name) => `(() => {
+  const q = ${JSON.stringify(name)};
+  const all = Array.from(document.querySelectorAll('a,button,li,[role="treeitem"]')).filter((n) => (n.innerText || '').trim() !== '');
+  const leaf = all.filter((n) => (n.innerText || '').trim() === q && !n.querySelector('a,button,li,[role="treeitem"]'));
+  const target = leaf[0] || all.find((n) => (n.innerText || '').trim() === q);
+  if (!target) return { ok: false, why: 'khong thay phien trong sidebar', name: q };
+  target.click();
+  return { ok: true, tag: target.tagName, name: q };
+})()`;
+
 // ---------- mode selftest ----------
 if (process.argv.includes("--selftest")) {
   try {
     const pages = (await cdpList()).filter((t) => t.type === "page");
     console.log("[1/3] CDP 9222: OK (" + pages.length + " page tab)");
-    const claude = pages.find((p) => /claude\.ai/.test(p.url));
-    console.log("[2/3] claude tab: " + (claude ? "CÓ — " + claude.url : "chưa có (claude_ask sẽ tự mở /new)"));
+    const claude = pages.find((p) => HOST_RE.test(p.url));
+    console.log("[2/3] claude tab: " + (claude ? "CÓ — " + claude.url : "chưa có (claude_ask sẽ tự mở /new dự phòng)"));
     if (claude) {
       const s = await call(claude.webSocketDebuggerUrl);
       const hasComposer = await evaluate(s, `!!document.querySelector('[contenteditable="true"]')`);
-      console.log("[3/3] composer claude.ai: " + (hasComposer ? "OK" : "chưa thấy (cần login hoặc trang /new)"));
+      console.log("[3/3] composer claude.ai: " + (hasComposer ? "OK" : "chưa thấy (cần login hoặc đang ở trang không có khung chat)"));
       s.close();
     } else {
       console.log("[3/3] composer claude.ai: chưa kiểm được (chưa có tab) — khi ask sẽ tự mở rồi kiểm");
     }
+    console.log("(phiên mặc định sẽ dùng tên: \"" + SESSION_NAME + "\")");
     console.log("SELFTEST: PASS (chưa gửi gì)");
     process.exit(0);
   } catch (e) {
-    console.log("SELFTEST: FAIL — " + (e.message || e) + (e.code === 2 ? " → chạy start-bridge.cmd trước" : ""));
+    console.log("SELFTEST: FAIL — " + (e.message || e) + (e.code === 2 ? " → chạy start-bridge.ps1 trước" : ""));
     process.exit(e.code || 1);
   }
 }
@@ -115,31 +144,55 @@ if (!brief || !out) {
 
 try {
   // 0) kết nối Chrome
-  let pages;
-  try { pages = (await cdpList()).filter((t) => t.type === "page"); }
-  catch (e) { console.error("ASK_FAILED chrome chưa chạy CDP (9222) — chạy start-bridge.cmd rồi thử lại. (" + (e.message || e) + ")"); process.exit(2); }
+  let targets;
+  try { targets = await cdpList(); }
+  catch (e) { console.error("ASK_FAILED chrome chưa chạy CDP (9222) — chạy start-bridge.ps1 rồi thử lại. (" + (e.message || e) + ")"); process.exit(2); }
+  const pages = targets.filter((t) => t.type === "page");
 
-  // 1) mở tab claude.ai mới (như mở chat mới) — không đụng tab claude hiện có của bạn
-  const fs = await import("node:fs");
-  const putRes = await fetch(`${CDP}/json/new?${encodeURIComponent("https://claude.ai/new")}`, { method: "PUT" });
-  if (!putRes.ok) throw Object.assign(new Error(`CDP /json/new HTTP ${putRes.status}`), { code: 1 });
-  const fresh = await putRes.json();
-  const s = await call(fresh.webSocketDebuggerUrl);
-  await s.send("Page.enable").catch(() => {});
+  // 1) TÁI DÙNG tab claude.ai đang mở (tiếp tục phiên đã có); chỉ mở /new khi chưa có tab nào
+  const existing = pages.find((p) => HOST_RE.test(p.url));
+  let s; let createdTab = false;
+  if (existing) {
+    s = await call(existing.webSocketDebuggerUrl);
+    await s.send("Page.enable").catch(() => {});
+    console.log("dùng tab claude.ai có sẵn (tiếp tục phiên): " + existing.url);
+  } else {
+    const fs0 = await import("node:fs");
+    const putRes = await fetch(`${CDP}/json/new?${encodeURIComponent("https://claude.ai/new")}`, { method: "PUT" });
+    if (!putRes.ok) throw Object.assign(new Error(`CDP /json/new HTTP ${putRes.status}`), { code: 1 });
+    const fresh = await putRes.json();
+    s = await call(fresh.webSocketDebuggerUrl);
+    await s.send("Page.enable").catch(() => {});
+    await s.send("Page.navigate", { url: "https://claude.ai/new" }).catch(() => {});
+    createdTab = true;
+    console.log("chưa có tab claude.ai → mở /new dự phòng (tab này do script tạo)");
+  }
 
-  // 2) chờ trang + composer sẵn sàng (có thể cần login nếu profile chưa đăng nhập)
-  await s.send("Page.navigate", { url: "https://claude.ai/new" }).catch(() => {});
+  // 2) chọn đúng PHIÊN đã có theo tên (chỉ với tab cũ); rồi chờ composer sẵn sàng
+  if (!createdTab) {
+    try {
+      const sel = await evaluate(s, SELECT_SESSION_EXPR(SESSION_NAME));
+      console.log("chọn phiên \"" + SESSION_NAME + "\": " + (sel && sel.ok ? "OK (đã click " + sel.tag + ")" : ((sel && sel.why) || "?") + " — tiếp tục dùng tab hiện tại"));
+    } catch (e) { console.log("chọn phiên cảnh báo: " + (e.message || e) + " — tiếp tục dùng tab hiện tại"); }
+  }
   await waitFor(s, `document.querySelector('[contenteditable="true"]') !== null`, 45000, "composer claude.ai (nếu lâu → chưa login?)").catch((e) => {
-    console.error(`ASK_FAILED ${e.message} — đăng nhập claude.ai trong Chrome (start-bridge.cmd) rồi chạy lại`);
+    console.error(`ASK_FAILED ${e.message} — đăng nhập claude.ai trong Chrome (start-bridge.ps1) rồi chạy lại`);
     process.exit(3);
   });
 
-  // 3) gõ câu hỏi vào composer + bấm Gửi (một evaluate, như người gõ thật)
+  // 3) mốc TRƯỚC khi gửi (text câu trả lời cũ ở phiên đã có — để sau đó phân biệt câu trả lời MỚI)
+  const fs = await import("node:fs");
   const text = fs.readFileSync(brief, "utf8");
+  let before = null; try { before = await evaluate(s, LAST_MSG_EXPR); } catch { /* chưa có tin cũ */ }
+  const beforeLen = (before && before.len) || 0;
+  console.log("mốc trước khi gửi: lastLen=" + beforeLen + (createdTab ? " (phiên mới)" : " (phiên đã có)"));
+
+  // 4) gõ câu hỏi vào composer + bấm Gửi (một evaluate, như người gõ thật; xoá text thừa nếu có)
   const expr = `(async () => {
     const el = document.querySelector('[contenteditable="true"]');
     if (!el) return { ok: false, why: "khong tim thay composer" };
     el.focus();
+    if ((el.innerText || '').trim().length > 0) document.execCommand('selectAll', false, null);
     document.execCommand('insertText', false, ${JSON.stringify(text)});
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     await wait(600);
@@ -158,25 +211,25 @@ try {
   })()`;
   const sent = await evaluate(s, expr);
   if (!sent || !sent.ok) throw Object.assign(new Error(sent?.why || "gửi thất bại, không thấy nút Gửi"), { code: 1 });
-  console.log("ask đã gửi (" + sent.sent + ") — chờ claude.ai trả lời (tối đa " + maxSec + "s)…");
+  console.log("ask đã gửi (" + sent.sent + ") — chờ câu trả lời MỚI trong phiên (tối đa " + maxSec + "s)…");
 
-  // 4) chờ trả lời xong: len tăng lên > mốc rồi ổn định 2 lần đọc (như claude_wait2)
+  // 5) chờ trả lời MỚI xong: câu cuối đổi so với mốc trước khi gửi, rồi ổn định 2 lần đọc (như claude_wait2)
   const t0 = Date.now();
-  let prev = 0, changed = false, stable = 0, final = null;
+  let prev = beforeLen, changed = false, stable = 0, final = null;
   while (Date.now() - t0 < maxSec * 1000) {
     await sleep(12000);
     let cur = null;
     try { cur = await evaluate(s, LAST_MSG_EXPR); } catch { /* page đang bận */ }
     if (!cur || cur.len <= 0) { console.log("... chưa thấy câu trả lời (" + Math.round((Date.now() - t0) / 1000) + "s)"); continue; }
-    if (cur.len > prev) { changed = true; stable = 0; prev = cur.len; console.log("... đang chạy len=" + cur.len + " (" + Math.round((Date.now() - t0) / 1000) + "s)"); }
+    if (cur.len !== beforeLen && cur.len !== prev) { changed = true; stable = 0; prev = cur.len; console.log("... đã có câu trả lời mới len=" + cur.len + " (" + Math.round((Date.now() - t0) / 1000) + "s)"); }
     else if (changed && cur.len === prev) { stable += 1; final = cur; console.log("... ổn định lần " + stable + " len=" + cur.len); if (stable >= 2) break; }
   }
   if (!final) throw Object.assign(new Error("TIMEOUT — claude.ai chưa trả lời xong (lastLen=" + prev + ")"), { code: 1 });
 
-  // 5) lưu + báo (giữ tab để bạn kiểm; --close để đóng)
+  // 6) lưu + báo. --close chỉ đóng tab do script tự tạo dự phòng; tab claude bạn dùng GIỮ NGUYÊN.
   fs.writeFileSync(out, final.text, "utf8");
   console.log("ASK_OK " + out + " " + final.len + " chars " + Math.round((Date.now() - t0) / 1000) + "s");
-  if (!keepTab) { await s.send("Page.close").catch(() => {}); }
+  if (createdTab && !keepTab) { await s.send("Page.close").catch(() => {}); }
   s.close();
   process.exit(0);
 } catch (e) {

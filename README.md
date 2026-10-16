@@ -79,7 +79,7 @@ Bridge dùng **CDP trực tiếp vào Chrome** — KHÔNG cần MCP client — n
 | File | Vai trò |
 |---|---|
 | `bridge/start-bridge.ps1` | mở Chrome với `--remote-debugging-port=9222` + **profile cố định `.chrome-profile/`** |
-| `bridge/claude_ask.mjs` | lệnh ask trọn gói: mở tab claude.ai mới → gõ brief → bấm Gửi → chờ trả lời stream xong → lưu nguyên văn |
+| `bridge/claude_ask.mjs` | lệnh ask trọn gói: **tiếp tục phiên claude.ai đang mở ("AI-Factory session")** → gõ brief → bấm Gửi → chờ trả lời mới xong → lưu nguyên văn |
 | `bridge/bridge.mjs` | bộ CDP cấp thấp (tabs/eval/navigate/send/read/screenshot) để thao tác tay |
 | `bridge/claude_wait.mjs` / `bridge/claude_wait2.mjs` | chờ câu trả lời ổn định (tách rời) |
 
@@ -101,6 +101,11 @@ node bridge\claude_ask.mjs <brief.txt> <out.txt> 540
 ```
 Mã thoát: `0` OK · `1` lỗi bước · `2` Chrome CDP chưa chạy (→ `start-bridge.ps1`) · `3` claude.ai chưa
 vào được (chưa login).
+
+> **Bridge tái dùng phiên claude.ai đã có** — KHÔNG tạo chat mới mỗi lượt: mỗi lần ask dùng **tab
+> claude.ai đang mở** và chọn phiên tên **"AI-Factory session"** trong sidebar (đổi bằng env
+> `CLAUDE_SESSION_NAME`), gửi brief như tin nhắn tiếp theo nên claude giữ ngữ cảnh các lượt bridge trước.
+> Chỉ khi chưa có tab claude nào mới mở `/new` dự phòng; `--close` chỉ đóng tab do script tự tạo.
 
 ## Cách dùng — luồng 3 giai đoạn
 
@@ -143,7 +148,8 @@ lấy **ý kiến thứ hai**. Cơ chế (chi tiết: `claude-bridge/BRIDGE.md`)
    ghi `<job>/bridge-brief.md`.
 3. Hỏi claude web như người thật bằng bridge CDP local CHÍNH xác:
    `start-bridge.ps1` → `node claude_ask.mjs <job>/bridge-brief.md <job>/feedback-raw.md 540`
-   (mở tab claude.ai, gõ, gửi, chờ trả lời xong, lưu nguyên văn — xem mục 2 ở trên).
+   (TIẾP TỤC phiên claude.ai đang mở — tên "AI-Factory session" — gõ, gửi, chờ trả lời MỚI xong, lưu
+   nguyên văn; KHÔNG tạo /new — xem mục 2 ở trên; env `CLAUDE_SESSION_NAME` để đổi tên phiên).
    Máy nào có client MCP thì có thể dùng tuyến B (`chrome-devtools-mcp`, `BRIDGE.md`).
 4. Chắt lọc feedback (`templates/feedback-ingest.md`) → `<job>/feedback.md` + action
    items → APPLY/PARTIAL/REJECT, rồi quyết định vòng tiếp theo.
